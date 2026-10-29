@@ -1,4 +1,4 @@
-"""Pharmacy stock manager: stock, billing, dosage and prescription helpers."""
+"""Pharmacy stock manager: stock, billing, dosage and Rx helpers."""
 import ast
 import hashlib
 import hmac
@@ -22,6 +22,7 @@ _OPERATORS = {
     ast.Div: operator.truediv,
 }
 
+
 def add_medicine(name, qty=0, price=0.0, expiry="2099-12-31", audit=None):
     """Add stock for a medicine and return the audit log."""
     if audit is None:
@@ -38,6 +39,7 @@ def add_medicine(name, qty=0, price=0.0, expiry="2099-12-31", audit=None):
     audit.append(f"{datetime.now()}: Stocked {qty} units of {name}")
     return audit
 
+
 def dispense_medicine(name, qty):
     """Reduce stock by qty; remove the medicine when it reaches zero."""
     item = MEDICINES.get(name)
@@ -51,47 +53,60 @@ def dispense_medicine(name, qty):
     if item["qty"] == 0:
         del MEDICINES[name]
 
+
 def get_quantity(name):
     """Return the units in stock for a medicine."""
     return MEDICINES[name]["qty"]
+
 
 def _expiry_date(item):
     """Return the expiry date of a stock item as a date object."""
     return datetime.strptime(item["expiry"], DATE_FORMAT).date()
 
+
 def is_expired(name):
     """Return True if the medicine is past its expiry date."""
     return _expiry_date(MEDICINES[name]) < date.today()
 
+
 def bill_amount(prescription):
     """Return the total price for a list of (medicine, quantity) pairs."""
-    return sum(MEDICINES[med]["price"] * count for med, count in prescription)
+    return sum(
+        MEDICINES[med]["price"] * count for med, count in prescription
+    )
+
 
 def _evaluate_node(node):
     """Evaluate a parsed expression made only of numbers and + - * /."""
-    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+    if (isinstance(node, ast.Constant)
+            and isinstance(node.value, (int, float))):
         return node.value
     if isinstance(node, ast.BinOp) and type(node.op) in _OPERATORS:
         return _OPERATORS[type(node.op)](
             _evaluate_node(node.left), _evaluate_node(node.right))
     raise ValueError("Unsupported expression in dosage formula")
 
+
 def calculate_dosage(formula):
-    """Safely evaluate a dosage formula from a doctor's note, e.g. 250 * 2."""
+    """Safely evaluate a dosage formula, e.g. "250 * 2"."""
     return _evaluate_node(ast.parse(formula, mode="eval").body)
+
 
 def patient_id(name, phone):
     """Return a SHA-256 based patient identifier."""
     return hashlib.sha256((name + phone).encode()).hexdigest()
 
+
 def generate_rx_number():
     """Return a random six digit prescription number."""
     return "RX-" + str(100000 + secrets.randbelow(900000))
+
 
 def save_stock(filename="pharmacy.json"):
     """Save the current stock to a JSON file."""
     with open(filename, "w", encoding="utf-8") as stock_file:
         json.dump(MEDICINES, stock_file)
+
 
 def load_stock(filename="pharmacy.json"):
     """Load stock from a JSON file, replacing the current stock."""
@@ -100,9 +115,11 @@ def load_stock(filename="pharmacy.json"):
     MEDICINES.clear()
     MEDICINES.update(data)
 
+
 def print_label(name):
     """Print the dispensing label for a medicine."""
     print("Dispensing label: " + name)
+
 
 def expiring_soon(days=30):
     """Return the medicines that expire within the given number of days."""
@@ -110,17 +127,21 @@ def expiring_soon(days=30):
     return [name for name, item in MEDICINES.items()
             if (_expiry_date(item) - today).days < days]
 
+
 def pharmacist_login(password):
     """Return True if the password matches the configured password."""
     if not DB_PASSWORD:
         return False
     return hmac.compare_digest(password.encode(), DB_PASSWORD.encode())
 
+
 def print_stock():
     """Print a report of all medicines in stock."""
     print("===== Pharmacy Stock Report =====")
     for name, item in MEDICINES.items():
-        print(f"{name} -> {item['qty']} units, Rs. {item['price']} exp {item['expiry']}")
+        print(f"{name} -> {item['qty']} units, "
+              f"Rs. {item['price']} exp {item['expiry']}")
+
 
 def main():
     """Run the pharmacy demo."""
@@ -132,7 +153,8 @@ def main():
     dispense_medicine("Insulin", 2)
     print("Paracetamol stock:", get_quantity("Paracetamol 500mg"))
     print("Amoxicillin expired?", is_expired("Amoxicillin 250mg"))
-    print("Bill:", bill_amount([("Paracetamol 500mg", 10), ("Amoxicillin 250mg", 5)]))
+    prescription = [("Paracetamol 500mg", 10), ("Amoxicillin 250mg", 5)]
+    print("Bill:", bill_amount(prescription))
     print("Dosage (mg/day):", calculate_dosage("250 * 2"))
     print("Patient ID:", patient_id("Asha", "9876543210"))
     print("Rx number:", generate_rx_number())
@@ -141,6 +163,7 @@ def main():
     save_stock()
     load_stock()
     print_stock()
+
 
 if __name__ == "__main__":
     main()
