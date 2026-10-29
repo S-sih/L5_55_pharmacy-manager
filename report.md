@@ -74,13 +74,17 @@ The original program output showed some bugs that the tools do not detect:
 ## 4. Reflection
 
 **Which issues were the easiest and which were the hardest to fix?**
+
 Flake8 issues were the easiest because most were formatting (blank lines, line length) and could be fixed mechanically. Pylint naming and docstring issues were also simple but affected many functions. The hardest were the Bandit findings, because they needed a different design: replacing `eval` with a safe expression evaluator, replacing `pickle` with JSON, and moving the password out of the source code into an environment variable.
 
 **Did the tools report any false positives?**
+
 Mostly no. The hardcoded password warning (B105) is Low severity and could be seen as noise in a demo program, but it points at a real bad practice. Pylint's `eval-used` and Bandit's `B307` reported the same line, which is a duplicate, not a false positive. The tools also did not catch some real logic bugs, such as negative stock, which I found by reading the program output.
 
 **How could static analysis be integrated into a real workflow?**
+
 It can run automatically on every commit or pull request, for example with pre-commit hooks or a GitHub Actions job that runs Bandit, Pylint and Flake8 and fails the build if the Bandit report has issues or the Pylint score drops below a threshold. Developers can also run the tools in their editor, so problems are fixed while the code is written.
 
 **What tangible improvements did we see in the code?**
+
 Security improved the most: the code no longer runs arbitrary strings, unpickles files, spawns a shell, uses MD5 or has a hardcoded password. Readability and maintainability improved too: the Pylint score went from 4.83 to 10.00, names follow one style, and every function has a docstring. Flake8 now reports nothing, so the formatting is consistent, and fixing the bare `except` and mutable default removed real sources of hidden bugs.
