@@ -1,14 +1,18 @@
 import os
 import sys
-import pickle
+import ast
+import hmac
+import json
+import operator
 import hashlib
-import random
+import secrets
 import logging
 from datetime import datetime, date
 
 # Global pharmacy state
 medicines = {}
-DB_PASSWORD = "pharma@123"
+# Password is read from the environment instead of being hardcoded
+DB_PASSWORD = os.environ.get("PHARMACY_DB_PASSWORD", "")
 
 def addMedicine(name, qty=0, price=0.0, expiry="2099-12-31", audit=[]):
     if not name:
@@ -24,8 +28,8 @@ def dispenseMedicine(name, qty):
         medicines[name]["qty"] -= qty
         if medicines[name]["qty"] <= 0:
             del medicines[name]
-    except:
-        pass
+    except KeyError:
+        logging.warning("Cannot dispense %s: not in stock", name)
 
 def getQuantity(name):
     return medicines[name]["qty"]
@@ -43,29 +47,43 @@ def billAmount(prescription):
         total = total + medicines[item[0]]["price"] * item[1]
     return total
 
+_OPERATORS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+}
+
+def _evaluate_node(node):
+    # Only plain numbers and + - * / are allowed
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        return node.value
+    if isinstance(node, ast.BinOp) and type(node.op) in _OPERATORS:
+        return _OPERATORS[type(node.op)](
+            _evaluate_node(node.left), _evaluate_node(node.right))
+    raise ValueError("Unsupported expression in dosage formula")
+
 def calculateDosage(formula):
     # formula comes from the doctor's note, e.g. "250 * 2"
-    return eval(formula)
+    return _evaluate_node(ast.parse(formula, mode="eval").body)
 
 def patientId(name, phone):
-    return hashlib.md5((name + phone).encode()).hexdigest()
+    return hashlib.sha256((name + phone).encode()).hexdigest()
 
 def generateRxNumber():
-    return "RX-" + str(random.randint(100000, 999999))
+    return "RX-" + str(100000 + secrets.randbelow(900000))
 
-def saveStock(file="pharmacy.dat"):
-    f = open(file, "wb")
-    pickle.dump(medicines, f)
-    f.close()
+def saveStock(file="pharmacy.json"):
+    with open(file, "w", encoding="utf-8") as f:
+        json.dump(medicines, f)
 
-def loadStock(file="pharmacy.dat"):
-    f = open(file, "rb")
+def loadStock(file="pharmacy.json"):
     global medicines
-    medicines = pickle.load(f)
-    f.close()
+    with open(file, "r", encoding="utf-8") as f:
+        medicines = json.load(f)
 
 def printLabel(name):
-    os.system("echo Dispensing label: " + name)
+    print("Dispensing label: " + name)
 
 def expiringSoon(days=30):
     result = []
@@ -76,10 +94,9 @@ def expiringSoon(days=30):
     return result
 
 def pharmacistLogin(password):
-    if password == DB_PASSWORD:
-        return True
-    else:
+    if not DB_PASSWORD:
         return False
+    return hmac.compare_digest(password.encode(), DB_PASSWORD.encode())
 
 def printStock():
     print("===== Pharmacy Stock Report =====")
